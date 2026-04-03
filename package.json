@@ -1,0 +1,23 @@
+{
+  "name": "livy-provenance-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/api/server.ts",
+    "tee:dev": "cargo run --manifest-path tee-attestor-rs/Cargo.toml",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/api/server.js",
+    "test": "tsx tests/programmatic.test.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "nanoid": "^5.1.5"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.23",
+    "@types/node": "^22.14.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.3"
+  }
+}
