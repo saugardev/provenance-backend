@@ -16,7 +16,9 @@ export type AppConfig = {
 export function loadConfig(): AppConfig {
   const port = Number(process.env.PORT ?? 3200);
   const host = process.env.HOST ?? "127.0.0.1";
-  const dataFile = resolve(process.cwd(), "data", "store.json");
+  const dataFile = process.env.DATA_FILE
+    ? resolve(process.cwd(), process.env.DATA_FILE)
+    : resolve(process.cwd(), "data", "store.json");
   const worldVerifyBaseUrl = process.env.WORLD_VERIFY_BASE_URL ?? "https://developer.world.org";
   const worldRpId = process.env.WORLD_RP_ID ?? "rp_placeholder";
   const worldApiKey = process.env.WORLD_API_KEY;

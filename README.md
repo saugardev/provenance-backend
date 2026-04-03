@@ -77,7 +77,7 @@ pnpm test
 ```
 
 This starts a mock World verify endpoint and validates ingest + provenance API behavior.
-It also validates ingest auth, idempotency replay behavior, signal mismatch rejection, policy mismatch rejection, attestation `minimal/full` read modes, and attestation recompute verification.
+It also validates ingest auth, rate limiting, idempotency replay behavior, signal mismatch rejection, policy mismatch rejection, attestation `minimal/full` read modes, and attestation recompute verification.
 
 ## Tracking
 

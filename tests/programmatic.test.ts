@@ -55,8 +55,9 @@ async function main() {
       WORLD_VERIFY_BASE_URL: `http://127.0.0.1:${worldPort}`,
       WORLD_RP_ID: "rp_test",
       TEE_MODE: "mock",
+      DATA_FILE: `data/test-store-${apiPort}.json`,
       BACKEND_API_KEY: backendApiKey,
-      INGEST_RATE_LIMIT_PER_MINUTE: "25",
+      INGEST_RATE_LIMIT_PER_MINUTE: "5",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -213,6 +214,28 @@ async function main() {
       }),
     });
     assert(policyMismatch.status === 400, `policy mismatch should fail, got ${policyMismatch.status}`);
+
+    const rateLimited = await fetch(`${base}/v1/ingest`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": backendApiKey },
+      body: JSON.stringify({
+        content_id: "photo-004",
+        content_hash: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        idkit_response: {
+          action: "upload_photo",
+          signal: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          responses: [
+            {
+              identifier: "orb",
+              proof: "0xproof",
+              merkle_root: "0xroot",
+              nullifier: "0xnullifier4",
+            },
+          ],
+        },
+      }),
+    });
+    assert(rateLimited.status === 429, `rate limit should fail with 429, got ${rateLimited.status}`);
 
     assert(verifyHits.length >= 1, "world verify endpoint should be hit");
 
