@@ -1,4 +1,5 @@
 export type VerificationLevel = "orb" | "device";
+export type VerificationPolicy = "orb" | "device" | "either";
 
 export type IngestInput = {
   content_id: string;
@@ -10,12 +11,17 @@ export type IngestInput = {
 export type WorldVerification = {
   verification_id: string;
   verified: boolean;
+  decision: "accepted" | "rejected";
+  reject_reason?: string;
   rp_id: string;
   verification_level: VerificationLevel;
+  verification_policy: VerificationPolicy;
   nullifier_hash: string;
   merkle_root: string;
   action: string;
   signal: string;
+  request_hash_hex: string;
+  response_hash_hex: string;
   request_payload: unknown;
   response_payload: unknown;
   created_at_ms: number;

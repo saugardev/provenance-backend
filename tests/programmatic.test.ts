@@ -90,12 +90,71 @@ async function main() {
     assert(ingest.status === 200, `ingest status ${ingest.status}`);
     assert(ingestJson?.ok === true, "ingest ok");
     assert(ingestJson?.attestation?.public_values_commitment_hash_hex, "attestation commitment hash exists");
+    assert(ingestJson?.verification?.decision === "accepted", "verification accepted");
+    assert(typeof ingestJson?.verification?.request_hash_hex === "string", "request hash exists");
+    assert(typeof ingestJson?.verification?.response_hash_hex === "string", "response hash exists");
 
     const content = await fetch(`${base}/v1/content/photo-001`).then((r) => r.json());
     assert(content?.ok === true, "content read ok");
 
     const prov = await fetch(`${base}/v1/content/photo-001/provenance`).then((r) => r.json());
     assert(prov?.ok === true, "provenance read ok");
+
+    const attId = ingestJson?.attestation?.attestation_id;
+    const attMinimal = await fetch(`${base}/v1/attestation/${attId}`).then((r) => r.json());
+    assert(attMinimal?.ok === true, "minimal attestation read ok");
+    assert(attMinimal?.mode === "minimal", "default mode is minimal");
+    assert(!attMinimal?.attestation?.public_values_b64, "minimal mode should not expose full public values");
+
+    const attFull = await fetch(`${base}/v1/attestation/${attId}?mode=full`).then((r) => r.json());
+    assert(attFull?.ok === true, "full attestation read ok");
+    assert(attFull?.mode === "full", "full mode selected");
+    assert(typeof attFull?.attestation?.public_values_b64 === "string", "full mode includes public values");
+
+    const signalMismatch = await fetch(`${base}/v1/ingest`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        content_id: "photo-002",
+        content_hash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        idkit_response: {
+          action: "upload_photo",
+          signal: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          responses: [
+            {
+              identifier: "orb",
+              proof: "0xproof",
+              merkle_root: "0xroot",
+              nullifier: "0xnullifier2",
+            },
+          ],
+        },
+      }),
+    });
+    assert(signalMismatch.status === 400, `signal mismatch should fail, got ${signalMismatch.status}`);
+
+    const policyMismatch = await fetch(`${base}/v1/ingest`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        content_id: "photo-003",
+        content_hash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        verification_policy: "device",
+        idkit_response: {
+          action: "upload_photo",
+          signal: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          responses: [
+            {
+              identifier: "orb",
+              proof: "0xproof",
+              merkle_root: "0xroot",
+              nullifier: "0xnullifier3",
+            },
+          ],
+        },
+      }),
+    });
+    assert(policyMismatch.status === 400, `policy mismatch should fail, got ${policyMismatch.status}`);
 
     assert(verifyHits.length >= 1, "world verify endpoint should be hit");
 

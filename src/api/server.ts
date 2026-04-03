@@ -5,6 +5,7 @@ import { MockTeeAdapter } from "../tee/mockAdapter.js";
 import { HttpTeeAdapter } from "../tee/httpAdapter.js";
 import { ProvenanceService } from "../services/provenanceService.js";
 import { verifyWorldSignature } from "../services/worldVerifier.js";
+import type { VerificationPolicy } from "../types.js";
 
 const cfg = loadConfig();
 const store = new JsonStore(cfg.dataFile);
@@ -25,6 +26,7 @@ app.post("/v1/ingest", async (req, res) => {
       content_hash?: string;
       idkit_response?: unknown;
       parents?: string[];
+      verification_policy?: VerificationPolicy;
     };
 
     const content_id = String(input.content_id ?? "").trim();
@@ -37,6 +39,8 @@ app.post("/v1/ingest", async (req, res) => {
       res.status(400).json({ error: "idkit_response is required" });
       return;
     }
+    const verification_policy: VerificationPolicy =
+      input.verification_policy === "orb" || input.verification_policy === "device" ? input.verification_policy : "either";
 
     const verification = await verifyWorldSignature({
       content_hash,
@@ -44,6 +48,7 @@ app.post("/v1/ingest", async (req, res) => {
       world_rp_id: cfg.worldRpId,
       world_verify_base_url: cfg.worldVerifyBaseUrl,
       world_api_key: cfg.worldApiKey,
+      verification_policy,
     });
 
     const result = await provenance.ingest(
@@ -92,7 +97,42 @@ app.get("/v1/attestation/:attestationId", (req, res) => {
     return;
   }
   const verification = provenance.getVerification(att.verification_id);
-  res.json({ ok: true, attestation: att, verification });
+  const mode = req.query.mode === "full" ? "full" : "minimal";
+  if (mode === "minimal") {
+    res.json({
+      ok: true,
+      mode,
+      attestation: {
+        attestation_id: att.attestation_id,
+        content_id: att.content_id,
+        content_hash: att.content_hash,
+        created_at_ms: att.created_at_ms,
+        tee_mode: att.tee_mode,
+        verifier_binary_hash: att.verifier_binary_hash,
+        public_values_commitment_hash_hex: att.public_values_commitment_hash_hex,
+        signature_algorithm: att.signature_algorithm,
+        signature_b64: att.signature_b64,
+        signing_public_key_pem: att.signing_public_key_pem,
+        verification_id: att.verification_id,
+      },
+      verification: verification
+        ? {
+            verification_id: verification.verification_id,
+            verified: verification.verified,
+            decision: verification.decision,
+            reject_reason: verification.reject_reason,
+            verification_level: verification.verification_level,
+            verification_policy: verification.verification_policy,
+            signal: verification.signal,
+            request_hash_hex: verification.request_hash_hex,
+            response_hash_hex: verification.response_hash_hex,
+          }
+        : null,
+    });
+    return;
+  }
+
+  res.json({ ok: true, mode, attestation: att, verification });
 });
 
 app.listen(cfg.port, cfg.host, () => {

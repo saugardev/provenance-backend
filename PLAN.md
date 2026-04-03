@@ -16,7 +16,7 @@
 - [x] Provenance storage and graph read model created.
 - [x] MCP tool skeleton created.
 - [x] Rust TEE service scaffold wired to livy-tee (`tee-attestor-rs` + HTTP adapter).
-- [ ] Full attestation evidence schema finalized.
+- [x] Full attestation evidence schema v1 (request/response hashes + decision + mode-specific attestation read).
 - [ ] API auth/rate limiting.
 - [ ] MCP server transport + auth.
 - [ ] Production database storage.
@@ -25,10 +25,10 @@
 
 ## Phase 1: Verification Core
 
-- [ ] Accept raw `idkitResponse` and forward as-is to `/api/v4/verify/{rp_id}`.
-- [ ] Enforce `signal == content_hash`.
-- [ ] Support `orb` and `device` policies.
-- [ ] Persist request+response hash and decision.
+- [x] Accept raw `idkitResponse` and forward as-is to `/api/v4/verify/{rp_id}`.
+- [x] Enforce `signal == content_hash`.
+- [x] Support `orb` and `device` policies.
+- [x] Persist request+response hash and decision.
 
 ## Phase 2: TEE Commitment
 
@@ -42,7 +42,7 @@
 - [ ] `POST /v1/ingest` final contract.
 - [ ] `GET /v1/content/:id`.
 - [ ] `GET /v1/content/:id/provenance`.
-- [ ] `GET /v1/attestation/:id` minimal/full modes.
+- [x] `GET /v1/attestation/:id` minimal/full modes.
 
 ## Phase 4: MCP
 

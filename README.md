@@ -44,10 +44,11 @@ TEE_MODE=rust TEE_SERVICE_URL=http://127.0.0.1:3400 pnpm dev
 ## API
 
 - `GET /healthz`
-- `POST /v1/ingest`
+- `POST /v1/ingest` (`verification_policy`: `orb | device | either`, default `either`)
 - `GET /v1/content/:contentId`
 - `GET /v1/content/:contentId/provenance`
-- `GET /v1/attestation/:attestationId`
+- `GET /v1/attestation/:attestationId` (default `mode=minimal`)
+- `GET /v1/attestation/:attestationId?mode=full`
 
 ## Programmatic test
 
@@ -56,6 +57,7 @@ pnpm test
 ```
 
 This starts a mock World verify endpoint and validates ingest + provenance API behavior.
+It also validates signal mismatch rejection, policy mismatch rejection, and attestation `minimal/full` read modes.
 
 ## Tracking
 
