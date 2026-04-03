@@ -10,6 +10,71 @@ import type { VerificationPolicy } from "../types.js";
 import { sha256ObjectHex } from "../utils/hash.js";
 import { runMcpTool, type McpToolCall } from "../mcp/server.js";
 
+const API_VERSION = "v1";
+
+type ErrorCode =
+  | "UNAUTHORIZED"
+  | "RATE_LIMITED"
+  | "INVALID_INPUT"
+  | "IDEMPOTENCY_CONFLICT"
+  | "NOT_FOUND"
+  | "WORLD_VERIFICATION_FAILED"
+  | "INTERNAL_ERROR";
+
+function sendError(
+  res: express.Response,
+  status: number,
+  code: ErrorCode,
+  message: string,
+  details?: unknown,
+): void {
+  res.status(status).json({
+    ok: false,
+    api_version: API_VERSION,
+    error: { code, message, details },
+  });
+}
+
+function normalizeIngestInput(input: unknown): {
+  content_id: string;
+  content_hash: string;
+  idkit_response: unknown;
+  parents: string[];
+  verification_policy: VerificationPolicy;
+} {
+  const body = (input ?? {}) as {
+    content_id?: unknown;
+    content_hash?: unknown;
+    idkit_response?: unknown;
+    parents?: unknown;
+    verification_policy?: unknown;
+  };
+
+  const content_id = String(body.content_id ?? "").trim();
+  const content_hash = String(body.content_hash ?? "").trim();
+  if (!content_id || !/^sha256:[0-9a-f]{64}$/i.test(content_hash)) {
+    throw new Error("content_id and sha256 content_hash are required");
+  }
+  if (!body.idkit_response) {
+    throw new Error("idkit_response is required");
+  }
+  if (body.parents !== undefined && !Array.isArray(body.parents)) {
+    throw new Error("parents must be an array of content_id strings");
+  }
+  const parents = (Array.isArray(body.parents) ? body.parents : []).map((x) => String(x).trim()).filter(Boolean);
+
+  const verification_policy: VerificationPolicy =
+    body.verification_policy === "orb" || body.verification_policy === "device" ? body.verification_policy : "either";
+
+  return {
+    content_id,
+    content_hash,
+    idkit_response: body.idkit_response,
+    parents,
+    verification_policy,
+  };
+}
+
 const cfg = loadConfig();
 const store = createStore(cfg);
 const tee = cfg.teeMode === "rust" ? new HttpTeeAdapter(cfg.teeServiceUrl) : new MockTeeAdapter();
@@ -38,7 +103,7 @@ app.post("/v1/ingest", async (req, res) => {
     if (cfg.backendApiKey) {
       const incomingApiKey = String(req.headers["x-api-key"] ?? "").trim();
       if (!incomingApiKey || incomingApiKey !== cfg.backendApiKey) {
-        res.status(401).json({ error: "unauthorized" });
+        sendError(res, 401, "UNAUTHORIZED", "unauthorized");
         return;
       }
     }
@@ -47,19 +112,16 @@ app.post("/v1/ingest", async (req, res) => {
     const now = Date.now();
     const recent = (ingestRateByIp.get(clientIp) ?? []).filter((x) => now - x < ingestRateWindowMs);
     if (recent.length >= cfg.ingestRateLimitPerMinute) {
-      res.status(429).json({ error: "rate limit exceeded", limit_per_minute: cfg.ingestRateLimitPerMinute });
+      sendError(res, 429, "RATE_LIMITED", "rate limit exceeded", {
+        limit_per_minute: cfg.ingestRateLimitPerMinute,
+      });
       return;
     }
     recent.push(now);
     ingestRateByIp.set(clientIp, recent);
 
-    const input = req.body as {
-      content_id?: string;
-      content_hash?: string;
-      idkit_response?: unknown;
-      parents?: string[];
-      verification_policy?: VerificationPolicy;
-    };
+    const input = req.body as unknown;
+    const normalized = normalizeIngestInput(input);
     const request_hash_hex = sha256ObjectHex(input);
     const idempotencyKey = String(req.headers["idempotency-key"] ?? "").trim();
     if (idempotencyKey) {
@@ -67,7 +129,7 @@ app.post("/v1/ingest", async (req, res) => {
       const seen = snapshot.idempotency[idempotencyKey];
       if (seen) {
         if (seen.request_hash_hex !== request_hash_hex) {
-          res.status(409).json({ error: "idempotency key already used with different request payload" });
+          sendError(res, 409, "IDEMPOTENCY_CONFLICT", "idempotency key already used with different request payload");
           return;
         }
         res.setHeader("idempotent-replay", "true");
@@ -76,43 +138,36 @@ app.post("/v1/ingest", async (req, res) => {
       }
     }
 
-    const content_id = String(input.content_id ?? "").trim();
-    const content_hash = String(input.content_hash ?? "").trim();
-    if (!content_id || !/^sha256:[0-9a-f]{64}$/i.test(content_hash)) {
-      res.status(400).json({ error: "content_id and sha256 content_hash are required" });
-      return;
-    }
-    if (!input.idkit_response) {
-      res.status(400).json({ error: "idkit_response is required" });
-      return;
-    }
-    const verification_policy: VerificationPolicy =
-      input.verification_policy === "orb" || input.verification_policy === "device" ? input.verification_policy : "either";
-
     const verification = await verifyWorldSignature({
-      content_hash,
-      idkit_response: input.idkit_response,
+      content_hash: normalized.content_hash,
+      idkit_response: normalized.idkit_response,
       world_rp_id: cfg.worldRpId,
       world_verify_base_url: cfg.worldVerifyBaseUrl,
       world_api_key: cfg.worldApiKey,
-      verification_policy,
+      verification_policy: normalized.verification_policy,
     });
 
     const result = await provenance.ingest(
       {
-        content_id,
-        content_hash,
-        idkit_response: input.idkit_response,
-        parents: Array.isArray(input.parents) ? input.parents : [],
+        content_id: normalized.content_id,
+        content_hash: normalized.content_hash,
+        idkit_response: normalized.idkit_response,
+        parents: normalized.parents,
       },
       verification,
     );
 
     const responseBody = {
       ok: true,
+      api_version: API_VERSION,
       content: result.content,
       attestation: result.attestation,
       verification,
+      data: {
+        content: result.content,
+        attestation: result.attestation,
+        verification,
+      },
     };
 
     if (idempotencyKey) {
@@ -134,26 +189,49 @@ app.post("/v1/ingest", async (req, res) => {
 
     res.status(200).json(responseBody);
   } catch (err) {
-    res.status(400).json({ error: String(err) });
+    const msg = err instanceof Error ? err.message : String(err);
+    const isWorldFailure = /world verification failed|world_verify_failed/i.test(msg);
+    const isInputFailure = /content_id and sha256|idkit_response is required|signal must equal|verification level mismatch|parents must be an array/i.test(
+      msg,
+    );
+    if (isInputFailure) {
+      sendError(res, 400, "INVALID_INPUT", msg);
+      return;
+    }
+    if (isWorldFailure) {
+      sendError(res, 400, "WORLD_VERIFICATION_FAILED", msg);
+      return;
+    }
+    sendError(res, 500, "INTERNAL_ERROR", msg);
   }
 });
 
 app.get("/v1/content/:contentId", async (req, res) => {
   const row = await provenance.getContent(req.params.contentId);
   if (!row) {
-    res.status(404).json({ error: "content not found" });
+    sendError(res, 404, "NOT_FOUND", "content not found");
     return;
   }
-  res.json({ ok: true, content: row });
+  res.json({
+    ok: true,
+    api_version: API_VERSION,
+    content: row,
+    data: row,
+  });
 });
 
 app.get("/v1/content/:contentId/provenance", async (req, res) => {
   const graph = await provenance.getProvenance(req.params.contentId);
   if (!graph) {
-    res.status(404).json({ error: "content not found" });
+    sendError(res, 404, "NOT_FOUND", "content not found");
     return;
   }
-  res.json({ ok: true, provenance: graph });
+  res.json({
+    ok: true,
+    api_version: API_VERSION,
+    provenance: graph,
+    data: graph,
+  });
 });
 
 app.get("/v1/attestation/:attestationId", async (req, res) => {

@@ -92,6 +92,9 @@ async function main() {
       }),
     });
     assert(unauthorized.status === 401, `unauthorized status ${unauthorized.status}`);
+    const unauthorizedJson = await unauthorized.json();
+    assert(unauthorizedJson?.api_version === "v1", "unauthorized response has api_version");
+    assert(unauthorizedJson?.error?.code === "UNAUTHORIZED", "unauthorized error code");
 
     const ingestPayload = {
       content_id: "photo-001",
@@ -119,6 +122,8 @@ async function main() {
     const ingestJson = await ingest.json();
     assert(ingest.status === 200, `ingest status ${ingest.status}`);
     assert(ingestJson?.ok === true, "ingest ok");
+    assert(ingestJson?.api_version === "v1", "ingest api_version");
+    assert(ingestJson?.data?.content?.content_id === "photo-001", "ingest data envelope");
     assert(ingestJson?.attestation?.public_values_commitment_hash_hex, "attestation commitment hash exists");
     assert(ingestJson?.verification?.decision === "accepted", "verification accepted");
     assert(typeof ingestJson?.verification?.request_hash_hex === "string", "request hash exists");
@@ -145,12 +150,23 @@ async function main() {
       }),
     });
     assert(idemConflict.status === 409, `idempotency conflict should fail, got ${idemConflict.status}`);
+    const idemConflictJson = await idemConflict.json();
+    assert(idemConflictJson?.error?.code === "IDEMPOTENCY_CONFLICT", "idempotency conflict code");
 
     const content = await fetch(`${base}/v1/content/photo-001`).then((r) => r.json());
     assert(content?.ok === true, "content read ok");
+    assert(content?.api_version === "v1", "content api_version");
+    assert(content?.data?.content_id === "photo-001", "content data envelope");
 
     const prov = await fetch(`${base}/v1/content/photo-001/provenance`).then((r) => r.json());
     assert(prov?.ok === true, "provenance read ok");
+    assert(prov?.api_version === "v1", "provenance api_version");
+    assert(Array.isArray(prov?.data?.nodes), "provenance data envelope");
+
+    const missingContent = await fetch(`${base}/v1/content/not-found`);
+    assert(missingContent.status === 404, `missing content should be 404, got ${missingContent.status}`);
+    const missingContentJson = await missingContent.json();
+    assert(missingContentJson?.error?.code === "NOT_FOUND", "missing content error code");
 
     const attId = ingestJson?.attestation?.attestation_id;
     const attMinimal = await fetch(`${base}/v1/attestation/${attId}`).then((r) => r.json());
@@ -193,6 +209,8 @@ async function main() {
       }),
     });
     assert(signalMismatch.status === 400, `signal mismatch should fail, got ${signalMismatch.status}`);
+    const signalMismatchJson = await signalMismatch.json();
+    assert(signalMismatchJson?.error?.code === "INVALID_INPUT", "signal mismatch INVALID_INPUT");
 
     const policyMismatch = await fetch(`${base}/v1/ingest`, {
       method: "POST",
@@ -216,6 +234,8 @@ async function main() {
       }),
     });
     assert(policyMismatch.status === 400, `policy mismatch should fail, got ${policyMismatch.status}`);
+    const policyMismatchJson = await policyMismatch.json();
+    assert(policyMismatchJson?.error?.code === "INVALID_INPUT", "policy mismatch INVALID_INPUT");
 
     const mcpUnauthorized = await fetch(`${base}/mcp/tool`, {
       method: "POST",
@@ -253,6 +273,8 @@ async function main() {
       }),
     });
     assert(rateLimited.status === 429, `rate limit should fail with 429, got ${rateLimited.status}`);
+    const rateLimitedJson = await rateLimited.json();
+    assert(rateLimitedJson?.error?.code === "RATE_LIMITED", "rate limit error code");
 
     assert(verifyHits.length >= 1, "world verify endpoint should be hit");
 

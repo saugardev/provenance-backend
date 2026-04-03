@@ -1,0 +1,185 @@
+openapi: 3.1.0
+info:
+  title: livy-provenance-backend API
+  version: "1.0.0"
+  description: Finalized v1 contract for ingest/content/provenance endpoints.
+servers:
+  - url: http://127.0.0.1:3200
+paths:
+  /v1/ingest:
+    post:
+      summary: Ingest content and produce attestation/provenance entry
+      parameters:
+        - in: header
+          name: x-api-key
+          schema: { type: string }
+          required: false
+        - in: header
+          name: idempotency-key
+          schema: { type: string }
+          required: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_id, content_hash, idkit_response]
+              properties:
+                content_id: { type: string }
+                content_hash:
+                  type: string
+                  pattern: "^sha256:[0-9a-fA-F]{64}$"
+                idkit_response: { type: object, additionalProperties: true }
+                parents:
+                  type: array
+                  items: { type: string }
+                verification_policy:
+                  type: string
+                  enum: [orb, device, either]
+      responses:
+        "200":
+          description: Ingested successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestSuccess"
+        "400":
+          description: Invalid input or failed verification
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /v1/content/{contentId}:
+    get:
+      summary: Get content entry by id
+      parameters:
+        - in: path
+          name: contentId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Content found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentSuccess"
+        "404":
+          description: Content not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /v1/content/{contentId}/provenance:
+    get:
+      summary: Get lineage graph for content id
+      parameters:
+        - in: path
+          name: contentId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Provenance graph found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProvenanceSuccess"
+        "404":
+          description: Content not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [ok, api_version, error]
+      properties:
+        ok: { type: boolean, const: false }
+        api_version: { type: string, const: v1 }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - UNAUTHORIZED
+                - RATE_LIMITED
+                - INVALID_INPUT
+                - IDEMPOTENCY_CONFLICT
+                - NOT_FOUND
+                - WORLD_VERIFICATION_FAILED
+                - INTERNAL_ERROR
+            message: { type: string }
+            details: {}
+    ContentRecord:
+      type: object
+      required: [content_id, content_hash, parents, created_at_ms, verification_id, attestation_id]
+      properties:
+        content_id: { type: string }
+        content_hash: { type: string }
+        parents:
+          type: array
+          items: { type: string }
+        created_at_ms: { type: integer }
+        verification_id: { type: string }
+        attestation_id: { type: string }
+    IngestSuccess:
+      type: object
+      required: [ok, api_version, data]
+      properties:
+        ok: { type: boolean, const: true }
+        api_version: { type: string, const: v1 }
+        data:
+          type: object
+          required: [content, attestation, verification]
+          properties:
+            content: { $ref: "#/components/schemas/ContentRecord" }
+            attestation: { type: object, additionalProperties: true }
+            verification: { type: object, additionalProperties: true }
+    ContentSuccess:
+      type: object
+      required: [ok, api_version, data]
+      properties:
+        ok: { type: boolean, const: true }
+        api_version: { type: string, const: v1 }
+        data: { $ref: "#/components/schemas/ContentRecord" }
+    ProvenanceSuccess:
+      type: object
+      required: [ok, api_version, data]
+      properties:
+        ok: { type: boolean, const: true }
+        api_version: { type: string, const: v1 }
+        data:
+          type: object
+          required: [content_id, nodes, edges]
+          properties:
+            content_id: { type: string }
+            nodes:
+              type: array
+              items: { $ref: "#/components/schemas/ContentRecord" }
+            edges:
+              type: array
+              items:
+                type: object
+                required: [from, to]
+                properties:
+                  from: { type: string }
+                  to: { type: string }

@@ -86,6 +86,10 @@ TEE_MODE=rust TEE_SERVICE_URL=http://127.0.0.1:3400 pnpm dev
 
 ## API
 
+`v1` envelope for finalized endpoints:
+- Success: `{ ok: true, api_version: "v1", data: ... }`
+- Error: `{ ok: false, api_version: "v1", error: { code, message, details? } }`
+
 - `GET /healthz`
 - `POST /v1/ingest` (`verification_policy`: `orb | device | either`, default `either`)
   - Optional auth via `x-api-key` when `BACKEND_API_KEY` is configured
@@ -96,6 +100,9 @@ TEE_MODE=rust TEE_SERVICE_URL=http://127.0.0.1:3400 pnpm dev
 - `GET /v1/attestation/:attestationId?mode=full`
 - `GET /v1/attestation/:attestationId/verify` (recompute and verify commitment/signature/consistency)
 - `POST /mcp/tool` (`x-mcp-key` required when `MCP_API_KEY` is set)
+
+Formal contract file:
+- [`openapi.v1.yaml`](./openapi.v1.yaml)
 
 ## Programmatic test
 

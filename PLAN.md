@@ -39,9 +39,9 @@
 
 ## Phase 3: Provenance API
 
-- [ ] `POST /v1/ingest` final contract.
-- [ ] `GET /v1/content/:id`.
-- [ ] `GET /v1/content/:id/provenance`.
+- [x] `POST /v1/ingest` final contract.
+- [x] `GET /v1/content/:id`.
+- [x] `GET /v1/content/:id/provenance`.
 - [x] `GET /v1/attestation/:id` minimal/full modes.
 
 ## Phase 4: MCP
