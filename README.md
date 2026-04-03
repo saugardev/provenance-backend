@@ -17,18 +17,44 @@ Server default: `http://127.0.0.1:3200`
 ```bash
 PORT=3200
 HOST=127.0.0.1
+STORAGE_MODE=json
+DATA_FILE=data/store.json
+DATABASE_URL=postgres://livy:livy@127.0.0.1:5432/livy_provenance
 WORLD_VERIFY_BASE_URL=https://developer.world.org
 WORLD_RP_ID=rp_xxx
 WORLD_API_KEY=
 TEE_MODE=mock
 TEE_SERVICE_URL=http://127.0.0.1:3400
 BACKEND_API_KEY=
+MCP_API_KEY=
 INGEST_RATE_LIMIT_PER_MINUTE=60
 ```
 
 `TEE_MODE` values:
 - `mock`: use in-process mock adapter
 - `rust`: call Rust attestor service at `TEE_SERVICE_URL`
+
+`STORAGE_MODE` values:
+- `json`: local file (`DATA_FILE`)
+- `postgres`: Postgres state store (`DATABASE_URL`)
+
+## Local Postgres (docker compose)
+
+```bash
+pnpm db:up
+```
+
+Run backend on Postgres:
+
+```bash
+STORAGE_MODE=postgres DATABASE_URL=postgres://livy:livy@127.0.0.1:5432/livy_provenance pnpm dev
+```
+
+Stop:
+
+```bash
+pnpm db:down
+```
 
 ## Public Values Schema (v1)
 
@@ -69,6 +95,7 @@ TEE_MODE=rust TEE_SERVICE_URL=http://127.0.0.1:3400 pnpm dev
 - `GET /v1/attestation/:attestationId` (default `mode=minimal`)
 - `GET /v1/attestation/:attestationId?mode=full`
 - `GET /v1/attestation/:attestationId/verify` (recompute and verify commitment/signature/consistency)
+- `POST /mcp/tool` (`x-mcp-key` required when `MCP_API_KEY` is set)
 
 ## Programmatic test
 
@@ -77,7 +104,7 @@ pnpm test
 ```
 
 This starts a mock World verify endpoint and validates ingest + provenance API behavior.
-It also validates ingest auth, rate limiting, idempotency replay behavior, signal mismatch rejection, policy mismatch rejection, attestation `minimal/full` read modes, and attestation recompute verification.
+It also validates ingest auth, rate limiting, idempotency replay behavior, signal mismatch rejection, policy mismatch rejection, attestation `minimal/full` read modes, attestation recompute verification, and MCP endpoint auth/calls.
 
 ## Tracking
 

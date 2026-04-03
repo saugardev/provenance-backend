@@ -34,6 +34,7 @@ async function main() {
   const worldPort = await freePort();
   const apiPort = await freePort();
   const backendApiKey = "test_backend_key";
+  const mcpApiKey = "test_mcp_key";
   const verifyHits: any[] = [];
 
   const world = createServer(async (req, res) => {
@@ -57,6 +58,7 @@ async function main() {
       TEE_MODE: "mock",
       DATA_FILE: `data/test-store-${apiPort}.json`,
       BACKEND_API_KEY: backendApiKey,
+      MCP_API_KEY: mcpApiKey,
       INGEST_RATE_LIMIT_PER_MINUTE: "5",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -214,6 +216,21 @@ async function main() {
       }),
     });
     assert(policyMismatch.status === 400, `policy mismatch should fail, got ${policyMismatch.status}`);
+
+    const mcpUnauthorized = await fetch(`${base}/mcp/tool`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tool: "get_content", content_id: "photo-001" }),
+    });
+    assert(mcpUnauthorized.status === 401, `mcp unauthorized status ${mcpUnauthorized.status}`);
+
+    const mcpAuthorized = await fetch(`${base}/mcp/tool`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-mcp-key": mcpApiKey },
+      body: JSON.stringify({ tool: "verify_attestation", attestation_id: attId }),
+    }).then((r) => r.json());
+    assert(mcpAuthorized?.ok === true, "mcp authorized call ok");
+    assert(mcpAuthorized?.result?.valid === true, "mcp verify_attestation should be valid");
 
     const rateLimited = await fetch(`${base}/v1/ingest`, {
       method: "POST",

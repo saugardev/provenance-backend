@@ -1,19 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { StoreShape } from "../types.js";
+import { EMPTY_STORE, type StoreBackend } from "./store.js";
 
-const EMPTY: StoreShape = {
-  contents: {},
-  verifications: {},
-  attestations: {},
-  idempotency: {},
-};
-
-export class JsonStore {
+export class JsonStore implements StoreBackend {
   constructor(private readonly path: string) {}
 
-  read(): StoreShape {
-    if (!existsSync(this.path)) return EMPTY;
+  async read(): Promise<StoreShape> {
+    if (!existsSync(this.path)) return EMPTY_STORE;
     const raw = readFileSync(this.path, "utf8");
     const parsed = JSON.parse(raw) as StoreShape;
     return {
@@ -24,7 +18,7 @@ export class JsonStore {
     };
   }
 
-  write(next: StoreShape): void {
+  async write(next: StoreShape): Promise<void> {
     mkdirSync(dirname(this.path), { recursive: true });
     writeFileSync(this.path, JSON.stringify(next, null, 2), "utf8");
   }

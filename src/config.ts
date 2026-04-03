@@ -4,12 +4,15 @@ export type AppConfig = {
   port: number;
   host: string;
   dataFile: string;
+  storageMode: "json" | "postgres";
+  databaseUrl?: string;
   worldVerifyBaseUrl: string;
   worldRpId: string;
   worldApiKey?: string;
   teeMode: "mock" | "rust";
   teeServiceUrl: string;
   backendApiKey?: string;
+  mcpApiKey?: string;
   ingestRateLimitPerMinute: number;
 };
 
@@ -19,24 +22,30 @@ export function loadConfig(): AppConfig {
   const dataFile = process.env.DATA_FILE
     ? resolve(process.cwd(), process.env.DATA_FILE)
     : resolve(process.cwd(), "data", "store.json");
+  const storageMode = (process.env.STORAGE_MODE ?? "json") === "postgres" ? "postgres" : "json";
+  const databaseUrl = process.env.DATABASE_URL;
   const worldVerifyBaseUrl = process.env.WORLD_VERIFY_BASE_URL ?? "https://developer.world.org";
   const worldRpId = process.env.WORLD_RP_ID ?? "rp_placeholder";
   const worldApiKey = process.env.WORLD_API_KEY;
   const teeMode = (process.env.TEE_MODE ?? "mock") === "rust" ? "rust" : "mock";
   const teeServiceUrl = process.env.TEE_SERVICE_URL ?? "http://127.0.0.1:3400";
   const backendApiKey = process.env.BACKEND_API_KEY;
+  const mcpApiKey = process.env.MCP_API_KEY;
   const ingestRateLimitPerMinute = Number(process.env.INGEST_RATE_LIMIT_PER_MINUTE ?? 60);
 
   return {
     port,
     host,
     dataFile,
+    storageMode,
+    databaseUrl,
     worldVerifyBaseUrl,
     worldRpId,
     worldApiKey,
     teeMode,
     teeServiceUrl,
     backendApiKey,
+    mcpApiKey,
     ingestRateLimitPerMinute,
   };
 }

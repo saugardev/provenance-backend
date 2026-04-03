@@ -18,8 +18,8 @@
 - [x] Rust TEE service scaffold wired to livy-tee (`tee-attestor-rs` + HTTP adapter).
 - [x] Full attestation evidence schema v1 (request/response hashes + decision + mode-specific attestation read).
 - [x] API auth/rate limiting (ingest endpoint).
-- [ ] MCP server transport + auth.
-- [ ] Production database storage.
+- [x] MCP server transport + auth (`POST /mcp/tool` + API key).
+- [x] Production database storage (config-selectable Postgres store).
 
 ## Phase Breakdown
 

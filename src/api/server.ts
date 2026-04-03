@@ -1,6 +1,6 @@
 import express from "express";
 import { loadConfig } from "../config.js";
-import { JsonStore } from "../storage/jsonStore.js";
+import { createStore } from "../storage/createStore.js";
 import { MockTeeAdapter } from "../tee/mockAdapter.js";
 import { HttpTeeAdapter } from "../tee/httpAdapter.js";
 import { ProvenanceService } from "../services/provenanceService.js";
@@ -8,9 +8,10 @@ import { verifyWorldSignature } from "../services/worldVerifier.js";
 import { verifyAttestationRecord } from "../services/attestationVerifier.js";
 import type { VerificationPolicy } from "../types.js";
 import { sha256ObjectHex } from "../utils/hash.js";
+import { runMcpTool, type McpToolCall } from "../mcp/server.js";
 
 const cfg = loadConfig();
-const store = new JsonStore(cfg.dataFile);
+const store = createStore(cfg);
 const tee = cfg.teeMode === "rust" ? new HttpTeeAdapter(cfg.teeServiceUrl) : new MockTeeAdapter();
 const provenance = new ProvenanceService(store, tee);
 
@@ -22,10 +23,12 @@ const ingestRateByIp = new Map<string, number[]>();
 app.get("/healthz", (_req, res) => {
   res.json({
     ok: true,
+    storage_mode: cfg.storageMode,
     tee_mode: cfg.teeMode,
     tee_service_url: cfg.teeServiceUrl,
     world_rp_id: cfg.worldRpId,
     ingest_auth_enabled: Boolean(cfg.backendApiKey),
+    mcp_auth_enabled: Boolean(cfg.mcpApiKey),
     ingest_rate_limit_per_minute: cfg.ingestRateLimitPerMinute,
   });
 });
@@ -60,7 +63,7 @@ app.post("/v1/ingest", async (req, res) => {
     const request_hash_hex = sha256ObjectHex(input);
     const idempotencyKey = String(req.headers["idempotency-key"] ?? "").trim();
     if (idempotencyKey) {
-      const snapshot = store.read();
+      const snapshot = await store.read();
       const seen = snapshot.idempotency[idempotencyKey];
       if (seen) {
         if (seen.request_hash_hex !== request_hash_hex) {
@@ -113,8 +116,8 @@ app.post("/v1/ingest", async (req, res) => {
     };
 
     if (idempotencyKey) {
-      const snapshot = store.read();
-      store.write({
+      const snapshot = await store.read();
+      await store.write({
         ...snapshot,
         idempotency: {
           ...snapshot.idempotency,
@@ -135,8 +138,8 @@ app.post("/v1/ingest", async (req, res) => {
   }
 });
 
-app.get("/v1/content/:contentId", (req, res) => {
-  const row = provenance.getContent(req.params.contentId);
+app.get("/v1/content/:contentId", async (req, res) => {
+  const row = await provenance.getContent(req.params.contentId);
   if (!row) {
     res.status(404).json({ error: "content not found" });
     return;
@@ -144,8 +147,8 @@ app.get("/v1/content/:contentId", (req, res) => {
   res.json({ ok: true, content: row });
 });
 
-app.get("/v1/content/:contentId/provenance", (req, res) => {
-  const graph = provenance.getProvenance(req.params.contentId);
+app.get("/v1/content/:contentId/provenance", async (req, res) => {
+  const graph = await provenance.getProvenance(req.params.contentId);
   if (!graph) {
     res.status(404).json({ error: "content not found" });
     return;
@@ -153,13 +156,13 @@ app.get("/v1/content/:contentId/provenance", (req, res) => {
   res.json({ ok: true, provenance: graph });
 });
 
-app.get("/v1/attestation/:attestationId", (req, res) => {
-  const att = provenance.getAttestation(req.params.attestationId);
+app.get("/v1/attestation/:attestationId", async (req, res) => {
+  const att = await provenance.getAttestation(req.params.attestationId);
   if (!att) {
     res.status(404).json({ error: "attestation not found" });
     return;
   }
-  const verification = provenance.getVerification(att.verification_id);
+  const verification = await provenance.getVerification(att.verification_id);
   const mode = req.query.mode === "full" ? "full" : "minimal";
   if (mode === "minimal") {
     res.json({
@@ -198,17 +201,35 @@ app.get("/v1/attestation/:attestationId", (req, res) => {
   res.json({ ok: true, mode, attestation: att, verification });
 });
 
-app.get("/v1/attestation/:attestationId/verify", (req, res) => {
-  const att = provenance.getAttestation(req.params.attestationId);
+app.get("/v1/attestation/:attestationId/verify", async (req, res) => {
+  const att = await provenance.getAttestation(req.params.attestationId);
   if (!att) {
     res.status(404).json({ error: "attestation not found" });
     return;
   }
 
-  const content = provenance.getContent(att.content_id);
-  const verification = provenance.getVerification(att.verification_id);
+  const content = await provenance.getContent(att.content_id);
+  const verification = await provenance.getVerification(att.verification_id);
   const report = verifyAttestationRecord(att, content, verification);
   res.json({ ok: true, attestation_id: att.attestation_id, ...report });
+});
+
+app.post("/mcp/tool", async (req, res) => {
+  try {
+    if (cfg.mcpApiKey) {
+      const incomingApiKey = String(req.headers["x-mcp-key"] ?? "").trim();
+      if (!incomingApiKey || incomingApiKey !== cfg.mcpApiKey) {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+      }
+    }
+
+    const call = req.body as McpToolCall;
+    const result = await runMcpTool(provenance, call);
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(400).json({ error: String(err) });
+  }
 });
 
 app.listen(cfg.port, cfg.host, () => {

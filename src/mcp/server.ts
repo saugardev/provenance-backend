@@ -7,18 +7,18 @@ export type McpToolCall =
   | { tool: "verify_attestation"; attestation_id: string }
   | { tool: "search_by_hash"; content_hash: string };
 
-export function runMcpTool(service: ProvenanceService, call: McpToolCall): unknown {
+export async function runMcpTool(service: ProvenanceService, call: McpToolCall): Promise<unknown> {
   if (call.tool === "get_content") {
-    return service.getContent(call.content_id);
+    return await service.getContent(call.content_id);
   }
   if (call.tool === "get_provenance") {
-    return service.getProvenance(call.content_id);
+    return await service.getProvenance(call.content_id);
   }
   if (call.tool === "verify_attestation") {
-    const att = service.getAttestation(call.attestation_id);
+    const att = await service.getAttestation(call.attestation_id);
     if (!att) return { valid: false, reason: "attestation not found" };
-    const content = service.getContent(att.content_id);
-    const verification = service.getVerification(att.verification_id);
+    const content = await service.getContent(att.content_id);
+    const verification = await service.getVerification(att.verification_id);
     const report = verifyAttestationRecord(att, content, verification);
     return {
       valid: report.valid,
@@ -29,7 +29,7 @@ export function runMcpTool(service: ProvenanceService, call: McpToolCall): unkno
     };
   }
   if (call.tool === "search_by_hash") {
-    const rows = service.findContentByHash(call.content_hash);
+    const rows = await service.findContentByHash(call.content_hash);
     return {
       count: rows.length,
       content_ids: rows.map((x) => x.content_id),

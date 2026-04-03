@@ -1,11 +1,11 @@
 import { nanoid } from "nanoid";
 import type { AttestationRecord, ContentRecord, IngestInput, StoreShape, WorldVerification } from "../types.js";
-import { JsonStore } from "../storage/jsonStore.js";
+import type { StoreBackend } from "../storage/store.js";
 import type { TeeAdapter } from "../tee/adapter.js";
 
 export class ProvenanceService {
   constructor(
-    private readonly store: JsonStore,
+    private readonly store: StoreBackend,
     private readonly tee: TeeAdapter,
   ) {}
 
@@ -14,7 +14,7 @@ export class ProvenanceService {
       throw new Error("world verification failed");
     }
 
-    const snapshot = this.store.read();
+    const snapshot = await this.store.read();
 
     const parents = (input.parents ?? []).map((x) => x.trim()).filter(Boolean);
     for (const pid of parents) {
@@ -75,29 +75,29 @@ export class ProvenanceService {
       },
     };
 
-    this.store.write(next);
+    await this.store.write(next);
     return { content, attestation };
   }
 
-  getContent(contentId: string) {
-    return this.store.read().contents[contentId] ?? null;
+  async getContent(contentId: string) {
+    return (await this.store.read()).contents[contentId] ?? null;
   }
 
-  getAttestation(attestationId: string) {
-    return this.store.read().attestations[attestationId] ?? null;
+  async getAttestation(attestationId: string) {
+    return (await this.store.read()).attestations[attestationId] ?? null;
   }
 
-  getVerification(verificationId: string) {
-    return this.store.read().verifications[verificationId] ?? null;
+  async getVerification(verificationId: string) {
+    return (await this.store.read()).verifications[verificationId] ?? null;
   }
 
-  findContentByHash(contentHash: string) {
-    const snapshot = this.store.read();
+  async findContentByHash(contentHash: string) {
+    const snapshot = await this.store.read();
     return Object.values(snapshot.contents).filter((row) => row.content_hash === contentHash);
   }
 
-  getProvenance(contentId: string) {
-    const snapshot = this.store.read();
+  async getProvenance(contentId: string) {
+    const snapshot = await this.store.read();
     const root = snapshot.contents[contentId];
     if (!root) return null;
 
