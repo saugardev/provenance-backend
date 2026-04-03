@@ -28,6 +28,21 @@ TEE_SERVICE_URL=http://127.0.0.1:3400
 - `mock`: use in-process mock adapter
 - `rust`: call Rust attestor service at `TEE_SERVICE_URL`
 
+## Public Values Schema (v1)
+
+TEE commitments currently encode these values, in order:
+1. `content_id`
+2. `content_hash`
+3. `verification_id`
+4. `world:level:{orb|device}`
+5. `world:nullifier:{hash}`
+6. `world:signal:{content_hash}`
+7. `world:action:{action}`
+8. `world:request_hash:{sha256(stable(idkit_response))}`
+9. `world:response_hash:{sha256(stable(world_verify_response))}`
+10. `parent_ids` (array)
+11. `created_at_ms`
+
 ## Rust TEE service (livy-tee bridge)
 
 ```bash
@@ -49,6 +64,7 @@ TEE_MODE=rust TEE_SERVICE_URL=http://127.0.0.1:3400 pnpm dev
 - `GET /v1/content/:contentId/provenance`
 - `GET /v1/attestation/:attestationId` (default `mode=minimal`)
 - `GET /v1/attestation/:attestationId?mode=full`
+- `GET /v1/attestation/:attestationId/verify` (recompute and verify commitment/signature/consistency)
 
 ## Programmatic test
 
@@ -57,7 +73,7 @@ pnpm test
 ```
 
 This starts a mock World verify endpoint and validates ingest + provenance API behavior.
-It also validates signal mismatch rejection, policy mismatch rejection, and attestation `minimal/full` read modes.
+It also validates signal mismatch rejection, policy mismatch rejection, attestation `minimal/full` read modes, and attestation recompute verification.
 
 ## Tracking
 

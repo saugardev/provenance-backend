@@ -5,6 +5,7 @@ import { MockTeeAdapter } from "../tee/mockAdapter.js";
 import { HttpTeeAdapter } from "../tee/httpAdapter.js";
 import { ProvenanceService } from "../services/provenanceService.js";
 import { verifyWorldSignature } from "../services/worldVerifier.js";
+import { verifyAttestationRecord } from "../services/attestationVerifier.js";
 import type { VerificationPolicy } from "../types.js";
 
 const cfg = loadConfig();
@@ -133,6 +134,19 @@ app.get("/v1/attestation/:attestationId", (req, res) => {
   }
 
   res.json({ ok: true, mode, attestation: att, verification });
+});
+
+app.get("/v1/attestation/:attestationId/verify", (req, res) => {
+  const att = provenance.getAttestation(req.params.attestationId);
+  if (!att) {
+    res.status(404).json({ error: "attestation not found" });
+    return;
+  }
+
+  const content = provenance.getContent(att.content_id);
+  const verification = provenance.getVerification(att.verification_id);
+  const report = verifyAttestationRecord(att, content, verification);
+  res.json({ ok: true, attestation_id: att.attestation_id, ...report });
 });
 
 app.listen(cfg.port, cfg.host, () => {

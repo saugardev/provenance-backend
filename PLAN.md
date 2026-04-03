@@ -32,10 +32,10 @@
 
 ## Phase 2: TEE Commitment
 
-- [ ] Define canonical public values schema v1.
-- [ ] Commit world verification evidence hash + content hash.
+- [x] Define canonical public values schema v1.
+- [x] Commit world verification evidence hash + content hash.
 - [ ] Produce quote/token + user minimal proof payload.
-- [ ] Add independent recompute verification script.
+- [x] Add independent recompute verification endpoint (`GET /v1/attestation/:id/verify`).
 
 ## Phase 3: Provenance API
 
@@ -46,7 +46,7 @@
 
 ## Phase 4: MCP
 
-- [ ] MCP tools: `get_content`, `get_provenance`, `verify_attestation`, `search_by_hash`.
+- [x] MCP tools: `get_content`, `get_provenance`, `verify_attestation`, `search_by_hash`.
 - [ ] Agent-safe response schema with verification reasons.
 - [ ] End-to-end agent scenario tests.
 

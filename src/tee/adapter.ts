@@ -6,6 +6,8 @@ export type TeeCommitInput = {
   nullifier_hash: string;
   signal: string;
   action: string;
+  request_hash_hex: string;
+  response_hash_hex: string;
   parent_ids: string[];
   created_at_ms: number;
 };

@@ -29,6 +29,8 @@ export class ProvenanceService {
       nullifier_hash: verification.nullifier_hash,
       signal: verification.signal,
       action: verification.action,
+      request_hash_hex: verification.request_hash_hex,
+      response_hash_hex: verification.response_hash_hex,
       parent_ids: parents,
       created_at_ms: Date.now(),
     });
@@ -87,6 +89,11 @@ export class ProvenanceService {
 
   getVerification(verificationId: string) {
     return this.store.read().verifications[verificationId] ?? null;
+  }
+
+  findContentByHash(contentHash: string) {
+    const snapshot = this.store.read();
+    return Object.values(snapshot.contents).filter((row) => row.content_hash === contentHash);
   }
 
   getProvenance(contentId: string) {

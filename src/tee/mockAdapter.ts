@@ -16,7 +16,9 @@ export class MockTeeAdapter implements TeeAdapter {
       `world:nullifier:${input.nullifier_hash}`,
       `world:signal:${input.signal}`,
       `world:action:${input.action}`,
-      ...input.parent_ids,
+      `world:request_hash:${input.request_hash_hex}`,
+      `world:response_hash:${input.response_hash_hex}`,
+      input.parent_ids,
       input.created_at_ms,
     ];
 

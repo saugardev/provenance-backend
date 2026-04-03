@@ -13,6 +13,8 @@ struct TeeCommitInput {
     nullifier_hash: String,
     signal: String,
     action: String,
+    request_hash_hex: String,
+    response_hash_hex: String,
     parent_ids: Vec<String>,
     created_at_ms: u64,
 }
@@ -69,6 +71,8 @@ async fn attest(Json(input): Json<TeeCommitInput>) -> Json<TeeCommitOutput> {
     pv.commit(&format!("world:nullifier:{}", input.nullifier_hash));
     pv.commit(&format!("world:signal:{}", input.signal));
     pv.commit(&format!("world:action:{}", input.action));
+    pv.commit(&format!("world:request_hash:{}", input.request_hash_hex));
+    pv.commit(&format!("world:response_hash:{}", input.response_hash_hex));
     pv.commit(&input.parent_ids);
     pv.commit(&input.created_at_ms);
 

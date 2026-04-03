@@ -111,6 +111,15 @@ async function main() {
     assert(attFull?.mode === "full", "full mode selected");
     assert(typeof attFull?.attestation?.public_values_b64 === "string", "full mode includes public values");
 
+    const attVerify = await fetch(`${base}/v1/attestation/${attId}/verify`).then((r) => r.json());
+    assert(attVerify?.ok === true, "attestation verify endpoint ok");
+    assert(attVerify?.valid === true, "attestation verification should pass in mock mode");
+    assert(Array.isArray(attVerify?.checks) && attVerify.checks.length > 0, "attestation checks are returned");
+    assert(
+      attVerify.checks.some((c: any) => c.name === "public_values_request_hash_match" && c.ok === true),
+      "request hash should be part of committed public values",
+    );
+
     const signalMismatch = await fetch(`${base}/v1/ingest`, {
       method: "POST",
       headers: { "content-type": "application/json" },
