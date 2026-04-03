@@ -7,6 +7,7 @@ import { ProvenanceService } from "../services/provenanceService.js";
 import { verifyWorldSignature } from "../services/worldVerifier.js";
 import { verifyAttestationRecord } from "../services/attestationVerifier.js";
 import type { VerificationPolicy } from "../types.js";
+import { sha256ObjectHex } from "../utils/hash.js";
 
 const cfg = loadConfig();
 const store = new JsonStore(cfg.dataFile);
@@ -15,13 +16,40 @@ const provenance = new ProvenanceService(store, tee);
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
+const ingestRateWindowMs = 60_000;
+const ingestRateByIp = new Map<string, number[]>();
 
 app.get("/healthz", (_req, res) => {
-  res.json({ ok: true, tee_mode: cfg.teeMode, tee_service_url: cfg.teeServiceUrl, world_rp_id: cfg.worldRpId });
+  res.json({
+    ok: true,
+    tee_mode: cfg.teeMode,
+    tee_service_url: cfg.teeServiceUrl,
+    world_rp_id: cfg.worldRpId,
+    ingest_auth_enabled: Boolean(cfg.backendApiKey),
+    ingest_rate_limit_per_minute: cfg.ingestRateLimitPerMinute,
+  });
 });
 
 app.post("/v1/ingest", async (req, res) => {
   try {
+    if (cfg.backendApiKey) {
+      const incomingApiKey = String(req.headers["x-api-key"] ?? "").trim();
+      if (!incomingApiKey || incomingApiKey !== cfg.backendApiKey) {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+      }
+    }
+
+    const clientIp = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown");
+    const now = Date.now();
+    const recent = (ingestRateByIp.get(clientIp) ?? []).filter((x) => now - x < ingestRateWindowMs);
+    if (recent.length >= cfg.ingestRateLimitPerMinute) {
+      res.status(429).json({ error: "rate limit exceeded", limit_per_minute: cfg.ingestRateLimitPerMinute });
+      return;
+    }
+    recent.push(now);
+    ingestRateByIp.set(clientIp, recent);
+
     const input = req.body as {
       content_id?: string;
       content_hash?: string;
@@ -29,6 +57,21 @@ app.post("/v1/ingest", async (req, res) => {
       parents?: string[];
       verification_policy?: VerificationPolicy;
     };
+    const request_hash_hex = sha256ObjectHex(input);
+    const idempotencyKey = String(req.headers["idempotency-key"] ?? "").trim();
+    if (idempotencyKey) {
+      const snapshot = store.read();
+      const seen = snapshot.idempotency[idempotencyKey];
+      if (seen) {
+        if (seen.request_hash_hex !== request_hash_hex) {
+          res.status(409).json({ error: "idempotency key already used with different request payload" });
+          return;
+        }
+        res.setHeader("idempotent-replay", "true");
+        res.status(seen.response_status).json(seen.response_body);
+        return;
+      }
+    }
 
     const content_id = String(input.content_id ?? "").trim();
     const content_hash = String(input.content_hash ?? "").trim();
@@ -62,12 +105,31 @@ app.post("/v1/ingest", async (req, res) => {
       verification,
     );
 
-    res.status(200).json({
+    const responseBody = {
       ok: true,
       content: result.content,
       attestation: result.attestation,
       verification,
-    });
+    };
+
+    if (idempotencyKey) {
+      const snapshot = store.read();
+      store.write({
+        ...snapshot,
+        idempotency: {
+          ...snapshot.idempotency,
+          [idempotencyKey]: {
+            key: idempotencyKey,
+            request_hash_hex,
+            response_status: 200,
+            response_body: responseBody,
+            created_at_ms: Date.now(),
+          },
+        },
+      });
+    }
+
+    res.status(200).json(responseBody);
   } catch (err) {
     res.status(400).json({ error: String(err) });
   }

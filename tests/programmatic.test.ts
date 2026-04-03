@@ -33,6 +33,7 @@ async function wait(url: string, timeoutMs = 20_000) {
 async function main() {
   const worldPort = await freePort();
   const apiPort = await freePort();
+  const backendApiKey = "test_backend_key";
   const verifyHits: any[] = [];
 
   const world = createServer(async (req, res) => {
@@ -54,6 +55,8 @@ async function main() {
       WORLD_VERIFY_BASE_URL: `http://127.0.0.1:${worldPort}`,
       WORLD_RP_ID: "rp_test",
       TEE_MODE: "mock",
+      BACKEND_API_KEY: backendApiKey,
+      INGEST_RATE_LIMIT_PER_MINUTE: "25",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -65,25 +68,49 @@ async function main() {
   try {
     await wait(`${base}/healthz`);
 
-    const ingest = await fetch(`${base}/v1/ingest`, {
+    const unauthorized = await fetch(`${base}/v1/ingest`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        content_id: "photo-001",
-        content_hash: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        content_id: "photo-unauth",
+        content_hash: "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         idkit_response: {
           action: "upload_photo",
-          signal: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          signal: "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
           responses: [
             {
               identifier: "orb",
               proof: "0xproof",
               merkle_root: "0xroot",
-              nullifier: "0xnullifier",
+              nullifier: "0xnullifier-unauth",
             },
           ],
         },
       }),
+    });
+    assert(unauthorized.status === 401, `unauthorized status ${unauthorized.status}`);
+
+    const ingestPayload = {
+      content_id: "photo-001",
+      content_hash: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      idkit_response: {
+        action: "upload_photo",
+        signal: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        responses: [
+          {
+            identifier: "orb",
+            proof: "0xproof",
+            merkle_root: "0xroot",
+            nullifier: "0xnullifier",
+          },
+        ],
+      },
+    };
+
+    const ingest = await fetch(`${base}/v1/ingest`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": backendApiKey, "idempotency-key": "idem-photo-001" },
+      body: JSON.stringify(ingestPayload),
     });
 
     const ingestJson = await ingest.json();
@@ -93,6 +120,28 @@ async function main() {
     assert(ingestJson?.verification?.decision === "accepted", "verification accepted");
     assert(typeof ingestJson?.verification?.request_hash_hex === "string", "request hash exists");
     assert(typeof ingestJson?.verification?.response_hash_hex === "string", "response hash exists");
+    const verifyHitCountAfterFirstIngest = verifyHits.length;
+
+    const replay = await fetch(`${base}/v1/ingest`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": backendApiKey, "idempotency-key": "idem-photo-001" },
+      body: JSON.stringify(ingestPayload),
+    });
+    const replayJson = await replay.json();
+    assert(replay.status === 200, `replay status ${replay.status}`);
+    assert(replay.headers.get("idempotent-replay") === "true", "replay header expected");
+    assert(replayJson?.attestation?.attestation_id === ingestJson?.attestation?.attestation_id, "replay should return same body");
+    assert(verifyHits.length === verifyHitCountAfterFirstIngest, "replay should not hit world verify endpoint again");
+
+    const idemConflict = await fetch(`${base}/v1/ingest`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": backendApiKey, "idempotency-key": "idem-photo-001" },
+      body: JSON.stringify({
+        ...ingestPayload,
+        content_id: "photo-001b",
+      }),
+    });
+    assert(idemConflict.status === 409, `idempotency conflict should fail, got ${idemConflict.status}`);
 
     const content = await fetch(`${base}/v1/content/photo-001`).then((r) => r.json());
     assert(content?.ok === true, "content read ok");
@@ -122,7 +171,7 @@ async function main() {
 
     const signalMismatch = await fetch(`${base}/v1/ingest`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-api-key": backendApiKey },
       body: JSON.stringify({
         content_id: "photo-002",
         content_hash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -144,7 +193,7 @@ async function main() {
 
     const policyMismatch = await fetch(`${base}/v1/ingest`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-api-key": backendApiKey },
       body: JSON.stringify({
         content_id: "photo-003",
         content_hash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",

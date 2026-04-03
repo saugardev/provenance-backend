@@ -17,7 +17,7 @@
 - [x] MCP tool skeleton created.
 - [x] Rust TEE service scaffold wired to livy-tee (`tee-attestor-rs` + HTTP adapter).
 - [x] Full attestation evidence schema v1 (request/response hashes + decision + mode-specific attestation read).
-- [ ] API auth/rate limiting.
+- [x] API auth/rate limiting (ingest endpoint).
 - [ ] MCP server transport + auth.
 - [ ] Production database storage.
 
@@ -53,6 +53,6 @@
 ## Phase 5: Hardening
 
 - [ ] Signed audit log.
-- [ ] Access controls.
-- [ ] Replay protections and idempotency keys.
+- [x] Access controls (API key gate for ingest writes).
+- [x] Replay protections and idempotency keys.
 - [ ] Monitoring + SLOs.

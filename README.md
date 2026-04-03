@@ -22,6 +22,8 @@ WORLD_RP_ID=rp_xxx
 WORLD_API_KEY=
 TEE_MODE=mock
 TEE_SERVICE_URL=http://127.0.0.1:3400
+BACKEND_API_KEY=
+INGEST_RATE_LIMIT_PER_MINUTE=60
 ```
 
 `TEE_MODE` values:
@@ -60,6 +62,8 @@ TEE_MODE=rust TEE_SERVICE_URL=http://127.0.0.1:3400 pnpm dev
 
 - `GET /healthz`
 - `POST /v1/ingest` (`verification_policy`: `orb | device | either`, default `either`)
+  - Optional auth via `x-api-key` when `BACKEND_API_KEY` is configured
+  - Optional idempotency via `idempotency-key` header
 - `GET /v1/content/:contentId`
 - `GET /v1/content/:contentId/provenance`
 - `GET /v1/attestation/:attestationId` (default `mode=minimal`)
@@ -73,7 +77,7 @@ pnpm test
 ```
 
 This starts a mock World verify endpoint and validates ingest + provenance API behavior.
-It also validates signal mismatch rejection, policy mismatch rejection, attestation `minimal/full` read modes, and attestation recompute verification.
+It also validates ingest auth, idempotency replay behavior, signal mismatch rejection, policy mismatch rejection, attestation `minimal/full` read modes, and attestation recompute verification.
 
 ## Tracking
 

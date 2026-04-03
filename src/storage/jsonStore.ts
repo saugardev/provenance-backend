@@ -6,6 +6,7 @@ const EMPTY: StoreShape = {
   contents: {},
   verifications: {},
   attestations: {},
+  idempotency: {},
 };
 
 export class JsonStore {
@@ -19,6 +20,7 @@ export class JsonStore {
       contents: parsed.contents ?? {},
       verifications: parsed.verifications ?? {},
       attestations: parsed.attestations ?? {},
+      idempotency: parsed.idempotency ?? {},
     };
   }
 

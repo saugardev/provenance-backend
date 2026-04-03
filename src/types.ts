@@ -51,8 +51,17 @@ export type ContentRecord = {
   attestation_id: string;
 };
 
+export type IdempotencyRecord = {
+  key: string;
+  request_hash_hex: string;
+  response_status: number;
+  response_body: unknown;
+  created_at_ms: number;
+};
+
 export type StoreShape = {
   contents: Record<string, ContentRecord>;
   verifications: Record<string, WorldVerification>;
   attestations: Record<string, AttestationRecord>;
+  idempotency: Record<string, IdempotencyRecord>;
 };
